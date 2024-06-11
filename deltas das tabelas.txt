@@ -1,0 +1,290 @@
+insert into [Control].[dbo].[Snowflake_Reference]	(ReferenceId, ReferenceTable, ReferenceDate) 
+		values (1, 'Pagamentos','2023-02-08 14:00:00.000')
+
+update [Control].[dbo].[Snowflake_Reference] 
+set ReferenceDate = '2023-02-19 14:00:00.000'
+where ReferenceTable = 'PAGAMENTOS'
+
+
+select * 
+from [Control].[dbo].[Snowflake_Reference] order by referencedate, referencetable
+
+
+
+
+'ORDERPARTNERVTEX';
+declare @RefDate datetime = null;
+select @RefDate = ReferenceDate from Control.dbo.Snowflake_Reference where ReferenceTable = 'ORDERPARTNERVTEX';
+
+SELECT Vtex.* from [sorteonline].[dbo].[OrderPartnerVtex] Vtex (nolock) 
+where Vtex.RegistrationTime >= dateadd(hour, -6, @RefDate)
+order by Vtex.RegistrationTime desc;
+
+
+
+BOLETINS
+
+declare @RefDate datetime = null;
+select @RefDate = ReferenceDate from Control.dbo.Snowflake_Reference where ReferenceTable = 'BOLETINS';
+
+select B.* 
+from sorteonline.dbo.Boletins B (nolock) 
+where B.DataHoraCadastro >= dateadd(day, -7, @RefDate)
+order by B.DataHoraCadastro desc;
+
+GRUPOSDESKJETLOTES
+declare @RefDate datetime = null;
+select @RefDate = ReferenceDate from Control.dbo.Snowflake_Reference where ReferenceTable = 'GRUPOSDESKJETLOTES';
+
+select GDJL.* 
+from [sorteonline].[dbo].[GruposDeskJetLotes] GDJL (nolock)
+	inner join sorteonline.dbo.Concursos c (nolock)
+		on GDJL.NumeroConcurso = c.Numero
+		and GDJL.CodigoLoteria = c.CodigoLoteria
+	where c.DataSorteio >= dateadd(hour, -6, @RefDate) 
+
+GRUPOSDESKJETDETALHES
+
+
+
+LANÇAMENTOS 
+
+declare @RefDate datetime = null;
+select @RefDate = ReferenceDate from Control.dbo.Snowflake_Reference where ReferenceTable = 'LANCAMENTOS';
+
+select l.* FROM sorteonline.dbo.Lancamentos l (nolock) 
+where l.Data >= dateadd(hour, -6, @RefDate)
+order by l.Data;
+
+LANCAMENTOSBANCO
+declare @RefDate datetime = null;
+select @RefDate = ReferenceDate from Control.dbo.Snowflake_Reference where ReferenceTable = 'LANCAMENTOSBANCO';
+
+select lb.* 
+from sorteonline.dbo.LancamentosBanco lb (nolock) 
+where lb.DataHoraInclusao >= dateadd(hour, -6, @RefDate)
+order by lb.CodigoLancamento;
+
+
+LOGLOTERICA
+declare @RefDate datetime = null;
+select @RefDate = ReferenceDate from Control.dbo.Snowflake_Reference where ReferenceTable = 'LOGLOTERICA';
+
+SELECT LL.* FROM [sorteonline].[dbo].[LogLoterica] LL (nolock) 
+where LL.Data >= dateadd(hour, -6, @RefDate)
+order by LL.Data desc;
+
+
+
+CARTÕES
+declare @RefDate datetime = null;
+select @RefDate = ReferenceDate from Control.dbo.Snowflake_Reference where ReferenceTable = 'CARTOES';
+
+select Ct.* 
+from sorteonline.dbo.Cartoes Ct (nolock)
+where Ct.CodigoGrupo in (
+	select distinct gc.CodigoGrupo
+	from sorteonline.dbo.GruposConcursos gc (nolock)
+	inner join sorteonline.dbo.Concursos c (nolock)
+		on gc.CodigoConcurso = c.CodigoConcurso
+	where c.DataSorteio >= dateadd(hour, -6, @RefDate) 
+) 
+order by Ct.CodigoGrupo, Ct.Numero
+
+
+GRUPOS
+declare @RefDate datetime = null;
+select @RefDate = ReferenceDate from Control.dbo.Snowflake_Reference where ReferenceTable = 'GRUPOS';
+
+select g.* 
+from sorteonline.dbo.Grupos g (nolock) 
+where g.CodigoGrupo in (
+	select distinct gc.CodigoGrupo
+	from sorteonline.dbo.GruposConcursos gc (nolock)
+	inner join sorteonline.dbo.Concursos c (nolock)
+		on gc.CodigoConcurso = c.CodigoConcurso
+	where c.DataSorteio >= dateadd(hour, -6, @RefDate) 
+) 
+order by g.CodigoGrupo;
+
+
+
+CONCURSOS
+declare @RefDate datetime = null;
+select @RefDate = ReferenceDate from Control.dbo.Snowflake_Reference where ReferenceTable = 'CONCURSOS';
+
+select c.* 
+from sorteonline.dbo.Concursos c (nolock) 
+where c.DataSorteio >= dateadd(day, -7, @RefDate) 
+order by c.DataSorteio;
+
+PAGAMENTOS
+declare @RefDate datetime = null;
+select @RefDate = ReferenceDate from Control.dbo.Snowflake_Reference where ReferenceTable = 'PAGAMENTOS';
+
+select p.* 
+from (
+	select ct.* 
+	from sorteonline.dbo.Pagamentos ct (nolock) 
+	where ct.CodigoPagamento in (
+		select distinct pgc.CodigoPagamento 
+		from sorteonline.dbo.ParticipacoesGruposConcursos pgc (nolock) 
+		left join sorteonline.dbo.Concursos c (nolock) 
+			on pgc.CodigoConcurso = c.CodigoConcurso 
+		where c.DataSorteio >= dateadd(hour, -6, @RefDate) 
+		or (c.DataSorteio is null and pgc.CodigoConcurso = 0)
+	) -- PGC não contempla Pedidos de CR, então não é necessário fazer este filtro.
+	union all 
+	select cr.* 
+	from sorteonline.dbo.Pagamentos cr (nolock) 
+	where cr.TipoCompra = 'CR'
+	and cr.Data >= dateadd(day, -7, @RefDate)
+) p 
+order by p.CodigoPagamento;
+
+
+
+PAGAMENTOSEXTERNOS
+
+declare @Table nvarchar(100) = 'PAGAMENTOSEXTERNOS';
+select p.* 
+from (  
+	select * 
+    from sorteonline.dbo.PagamentosExternos PE (nolock) 
+	where PE.CodigoPagamento in (
+		select distinct pgc.CodigoPagamento 
+        from sorteonline.dbo.ParticipacoesGruposConcursos pgc (nolock) 
+		inner join sorteonline.dbo.Pagamentos ct (nolock) 
+		on pgc.CodigoPagamento = ct.CodigoPagamento	
+        inner join sorteonline.dbo.Concursos c (nolock) 
+            on pgc.CodigoConcurso = c.CodigoConcurso 
+        where c.DataSorteio >= dateadd(hour, -6, getdate())
+		)
+	union all 
+    select PE.* 
+    from sorteonline.dbo.PagamentosExternos PE (nolock) 
+	inner join sorteonline.dbo.Pagamentos cr (nolock) 
+		on PE.CodigoPagamento = cr.CodigoPagamento
+    where cr.TipoCompra = 'CR'
+    and cr.Data >= dateadd(day, -7, getdate())
+) p 
+
+
+PARTICIPACOESGRUPOSCONCURSOS
+declare @RefDate datetime = null;
+select @RefDate = ReferenceDate from Control.dbo.Snowflake_Reference where ReferenceTable = 'PARTICIPACOESGRUPOSCONCURSOS';
+
+select pgc.* 
+from sorteonline.dbo.ParticipacoesGruposConcursos pgc (nolock) 
+left join sorteonline.dbo.Concursos c (nolock)
+	on pgc.CodigoConcurso = c.CodigoConcurso
+where c.DataSorteio >= dateadd(hour, -6, @RefDate)
+or (c.DataSorteio is null and pgc.CodigoConcurso = 0)
+order by pgc.CodigoPagamento;
+
+
+GRUPOSCONCURSOS
+declare @RefDate datetime = null;
+select @RefDate = ReferenceDate from Control.dbo.Snowflake_Reference where ReferenceTable = 'GRUPOSCONCURSOS';
+
+select gc.* 
+from sorteonline.dbo.GruposConcursos gc (nolock) 
+left join sorteonline.dbo.Concursos c (nolock)
+	on gc.CodigoConcurso = c.CodigoConcurso
+where c.DataSorteio >= dateadd(hour, -6, @RefDate)
+or (c.DataSorteio is null and gc.CodigoConcurso = 0)
+order by gc.CodigoGrupo;
+
+
+PremiacoesConcursos
+declare @RefDate datetime = null;
+select @RefDate = ReferenceDate from Control.dbo.Snowflake_Reference where ReferenceTable = 'PREMIACOESCONCURSOS'
+    select pc.* 
+     FROM [sorteonline].[dbo].[PremiacoesConcursos] PC (nolock) 
+	 inner join [sorteonline].[dbo].[Concursos] c(nolock) 
+		ON 	pc.CodigoConcurso = c.CodigoConcurso 	
+	where c.DataSorteio >= dateadd(hour, -24, @RefDate) 
+
+
+
+PremiacoesConcursosEstados
+declare @RefDate datetime = null;
+select @RefDate = ReferenceDate from Control.dbo.Snowflake_Reference where ReferenceTable = 'PREMIACOESCONCURSOSESTADOS'
+
+    select pce.* 
+     FROM [sorteonline].[dbo].[PremiacoesConcursosEstados] PCE (nolock) 
+	 inner join [sorteonline].[dbo].[Concursos] c(nolock) 
+		ON 	pce.CodigoConcurso = c.CodigoConcurso 	
+	where c.DataSorteio >= dateadd(day, -6, @RefDate) 
+
+
+
+PremiacoesConcursosEstadosCidades
+declare @RefDate datetime = null;
+select @RefDate = ReferenceDate from Control.dbo.Snowflake_Reference where ReferenceTable = 'PREMIACOESCONCURSOSESTADOSCIDADES'
+    select pcec.* 
+     FROM [sorteonline].[dbo].[PremiacoesConcursosEstadosCidades] PCEC (nolock) 
+	 inner join [sorteonline].[dbo].[Concursos] c(nolock) 
+		ON 	pcec.CodigoConcurso = c.CodigoConcurso 	
+	where c.DataSorteio >= dateadd(day, -6, @RefDate) 
+
+
+PremiacoesCotasDisponiveis
+declare @RefDate datetime = null;
+select @RefDate = ReferenceDate from Control.dbo.Snowflake_Reference where ReferenceTable = 'PREMIACOESCOTASDISPONIVEIS'
+
+    select pcd.* 
+     FROM [sorteonline].[dbo].[PremiacoesCotasDisponiveis] PCD(nolock) 
+	 inner join [sorteonline].[dbo].[Concursos] c(nolock) 
+		ON 	pcd.CodigoConcurso = c.CodigoConcurso 	
+	where c.DataSorteio >= dateadd(day, -10, @RefDate) 
+
+
+PremiacoesGruposConcursos
+declare @RefDate datetime = null;
+select @RefDate = ReferenceDate from Control.dbo.Snowflake_Reference where ReferenceTable = 'PREMIACOESGRUPOSCONCURSOS'
+
+    select PGC.* 
+     FROM [sorteonline].[dbo].[PremiacoesGruposConcursos] PGC (nolock) 
+	 inner join [sorteonline].[dbo].[Concursos] c(nolock)  
+		ON 	PGC.CodigoConcurso = c.CodigoConcurso 	
+	where c.DataSorteio >= dateadd(day, -10, @RefDate) 
+
+PremiacoesUsuarios
+declare @RefDate datetime = null;
+select @RefDate = ReferenceDate from Control.dbo.Snowflake_Reference where ReferenceTable = 'PREMIACOESUSUARIOS'
+    select PU.* 
+     FROM [sorteonline].[dbo].[PremiacoesUsuarios] PU (nolock) 
+	 inner join [sorteonline].[dbo].[Concursos] c (nolock) 
+		ON 	PU.CodigoConcurso = c.CodigoConcurso 	
+	where c.DataSorteio >= dateadd(day, -10, @RefDate) 
+
+
+PremiacoesUsuariosLancamentos
+
+declare @RefDate datetime = null;
+select @RefDate = ReferenceDate from Control.dbo.Snowflake_Reference where ReferenceTable = 'PREMIACOESUSUARIOSLANCAMENTOS'
+
+    select PUL.* 
+     FROM [sorteonline].[dbo].[PremiacoesUsuariosLancamentos] PUL
+	 inner join [sorteonline].[dbo].[PremiacoesUsuarios] PU (nolock) 
+		on PUL.CodigoPremiacaoUsuario = PU.CodigoPremiacaoUsuario
+	 inner join [sorteonline].[dbo].[Concursos] c (nolock) 
+		ON 	PU.CodigoConcurso = c.CodigoConcurso 	
+	where c.DataSorteio >= dateadd(day, -10, @RefDate) 
+
+NEWSLETTERS
+declare @RefDate datetime = null;
+select @RefDate = ReferenceDate from Control.dbo.Snowflake_Reference where ReferenceTable = 'NEWSLETTERS';
+
+SELECT N.* from [tudosobreloterias].[dbo].[Newsletters] N (nolock) 
+where N.Date >= dateadd(hour, -6, @RefDate)
+order by N.Date desc;
+
+
+
+Resgates
+
+select * from sorteonline.dbo.Resgates 
+where Data >= dateadd(day,-15,getdate())
+
